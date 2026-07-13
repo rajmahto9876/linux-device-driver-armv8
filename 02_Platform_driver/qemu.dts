@@ -386,4 +386,19 @@
     	buffer-size = <512>;
     	device-name = "raj_qemu";
     };
+
+#for phandle testing:
+
+    gpioA: gpio-keys 
+    {
+        compatible = "raj,gpio";
+        #gpio-cells = <2>;
+    };
+
+    led
+    {
+        compatible = "raj,led";
+        gpios = <&gpioA 21 0>;
+    };
+
 };
