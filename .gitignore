@@ -8,4 +8,6 @@ vendor/
 
 *.o
 *.elf
+*.map 
+*.txt
 
