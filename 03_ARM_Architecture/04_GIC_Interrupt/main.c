@@ -76,11 +76,17 @@ int main(void)
 	__UNUSED__(__STACK_START__);
 
 	gic_init();
-	gic_enable_timer_irq();
+	gic_enable_irq();
 	timer_init();
+	uart_init();
+	uart_irq_enable();
 	
 	asm volatile("msr DAIFClr, #2");
-
+	asm volatile ("isb");
+	/*
+		UART_TEST
+	*/
+	uart_tx_string("RAJ AURT_TEST \n");
 	/*
 		If CurrentEL = 0x4, 0x4 >> 2 = 1
 		i.e., running  EL = 1 (EL1).

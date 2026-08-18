@@ -126,19 +126,19 @@ vectorTable:
 
 /* Current EL with SP0 */
 sync_current_sp0:
-    b sync_current_sp0_handler
+    bl sync_current_sp0_handler
     eret
 
 irq_current_sp0:
-    b irq_current_sp0_handler
+    bl irq_current_sp0_handler
     eret
 
 fiq_current_sp0:
-    b fiq_current_sp0_handler
+    bl fiq_current_sp0_handler
     eret
 
 serr_current_sp0:
-    b serr_current_sp0_handler
+    bl serr_current_sp0_handler
     eret
 
 
@@ -163,45 +163,45 @@ irq_current_spx:
     eret
 
 fiq_current_spx:
-    b fiq_current_spx_handler
+    bl fiq_current_spx_handler
     eret
 
 serr_current_spx:
-    b serr_current_spx_handler
+    bl serr_current_spx_handler
     eret
 
 
     /* Lower EL AArch64 */
 sync_lower64:
-    b sync_lower64_handler
+    bl sync_lower64_handler
     eret 
 
 irq_lower64:
-    b irq_lower64_handler
+    bl irq_lower64_handler
     eret 
 
 fiq_lower64:
-    b fiq_lower64_handler
+    bl fiq_lower64_handler
     eret 
 
 serr_lower64:
-    b serr_lower64_handler
+    bl serr_lower64_handler
     eret 
 
 
     /* Lower EL AArch32 */
 sync_lower32:
-    b sync_lower32_handler
+    bl sync_lower32_handler
     eret
 
 irq_lower32:
-    b irq_lower32_handler
+    bl irq_lower32_handler
     eret
 
 fiq_lower32:
-    b fiq_lower32_handler
+    bl fiq_lower32_handler
     eret
 
 serr_lower32:
-    b serr_lower32_handler
+    bl serr_lower32_handler
     eret

@@ -458,3 +458,40 @@ PPI (Private Peripheral Interrupt) because each CPU core has its own timer.
 | PPI             | Delivers timer interrupt to the local CPU    |
 | GIC             | Routes the interrupt                         |
 | CPU             | Takes the IRQ exception and runs the handler |
+
+
+# UART CONFIG
+
+```bash
+	Keyboard/input
+	     │
+	     ▼
+	QEMU PL011 UART
+	     │
+	     │ SPI 33
+	     ▼
+	GIC Distributor
+	     │
+	     ▼
+	GIC CPU interface
+	     │
+	     │ ICC_IAR1_EL1
+	     ▼
+	CPU IRQ exception
+	     │
+	     ▼
+	your irq vector
+	     │
+	     ▼
+	irq_handler()
+	     │
+	     ├── Read IRQ ID
+	     ├── IRQ == 33 ?
+	     ├── Read UART
+	     └── EOI
+	     │
+	     │ ICC_EOIR1_EL1
+	     ▼
+	ERET
+
+```

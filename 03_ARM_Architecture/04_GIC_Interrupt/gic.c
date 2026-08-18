@@ -21,15 +21,33 @@ know their aliases.
 
 #include "gic.h"
 
+#define GICD_BASE           0x08000000UL
+#define GICR_BASE           0x080A0000UL
+#define GICD_TYPER          0x0004
+
 #define GICR_ISENABLER0     0x10100
 #define GICR_ICENABLER0     0x10180
 
 #define GICR_IPRIORITYR     0x10400
 
 #define GICR_IGROUPR0       0x10080
-#define GICD_CTLR           0x0000
 
 #define GICR_WAKER          0x00014
+
+
+#define GICD_CTLR             0x0000
+#define GICD_ISENABLER        0x0100
+#define GICD_ICENABLER        0x0180
+#define GICD_IPRIORITYR       0x0400
+#define GICD_ITARGETSR        0x0800
+#define GICD_ICFGR            0x0C00
+
+#define UART_IRQ             33
+
+#define GICD_ISENABLER       0x0100
+#define GICD_IPRIORITYR      0x0400
+#define GICD_ICFGR           0x0C00
+#define GICD_IROUTER         0x6000
 
 static inline void gic_wake_redistributor(void)
 {
@@ -68,7 +86,32 @@ static inline uint32_t mmio_read32(uint64_t addr)
     return *(volatile uint32_t *)addr;
 }
 
-void gic_enable_timer_irq(void)
+static void gic_set_spi_priority(uint32_t irq, uint8_t priority)
+{
+    volatile uint8_t *priority_reg;
+
+    priority_reg =
+        (volatile uint8_t *)(GICD_BASE + GICD_IPRIORITYR + irq);
+
+    *priority_reg = priority;
+
+    __asm__ volatile("dsb sy");
+}
+
+static void gic_route_spi(uint32_t irq)
+{
+    volatile uint64_t *router;
+    router = (volatile uint64_t *)(GICD_BASE + GICD_IROUTER + ((uint64_t)irq * 8));
+
+    /*
+     * Affinity 0 = CPU0
+     */
+    *router = 0;
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
+}
+
+void gic_enable_irq(void)
 {
     volatile uint32_t *group  = (volatile uint32_t *)(GICR_BASE + GICR_IGROUPR0);
     volatile uint32_t *enable = (volatile uint32_t *)(GICR_BASE + GICR_ISENABLER0);
@@ -80,6 +123,29 @@ void gic_enable_timer_irq(void)
     *group |= (1u << 30);
     priority[30] = 0x80;
     *enable = (1u << 30);
+
+/*
+    UART_IRQ = 33
+    33 / 32 = 1
+    33 % 32 = 1, GICD_ISENABLER1 bit 1
+*/
+
+    gic_route_spi(33);
+    gic_set_spi_priority(33, 0x80);
+
+    volatile uint32_t *enable_uart;
+    enable_uart = (volatile uint32_t *)(GICD_BASE + GICD_ISENABLER + ((UART_IRQ / 32) * 4));
+    *enable_uart |= (1u << (UART_IRQ % 32));
+
+    volatile uint32_t *igroup = (volatile uint32_t *)(GICD_BASE + 0x0080 + 4 * (UART_IRQ / 32));
+    *igroup |= (1u << (UART_IRQ % 32));
+
+    volatile uint32_t *icfgr = (volatile uint32_t *)(GICD_BASE + GICD_ICFGR + 4 * (UART_IRQ / 16));
+    *icfgr &= ~(0x3u << ((UART_IRQ % 16) * 2));   // 00 = level-sensitive
+    
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
+
 }
 
 /* Initialize CPU Interface */
