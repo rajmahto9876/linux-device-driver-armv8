@@ -1,6 +1,7 @@
 #include "vectorHandler.h"
 #include "gic.h"
 #include "timer.h"
+#include "uart.h"
 
 struct pt_regs;
 
@@ -22,6 +23,11 @@ void irq_handler(void)
     {
         timer_irq_count++;
         timer_reload();
+    }
+
+    if(irq == 33)
+    {
+    	uart_irq_handler();
     }
 
     gic_end_interrupt(irq);
