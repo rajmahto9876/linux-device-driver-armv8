@@ -1,1 +1,0 @@
-cmd_/home/raj-pc/RajDev/github.io/linux-device-driver-armv8/05_Kernel_Memory_Management/02_Vmalloc_Basic/memory.o := ld  -m elf_x86_64 -z noexecstack     -r -o /home/raj-pc/RajDev/github.io/linux-device-driver-armv8/05_Kernel_Memory_Management/02_Vmalloc_Basic/memory.o /home/raj-pc/RajDev/github.io/linux-device-driver-armv8/05_Kernel_Memory_Management/02_Vmalloc_Basic/main.o
