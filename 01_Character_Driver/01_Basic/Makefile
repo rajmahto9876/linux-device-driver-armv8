@@ -1,5 +1,5 @@
 obj-m := chr_driver.o
-hello-objs += main.o
+chr_driver-objs += main.o
 
 ARCH=arm64
 CROSS_COMPILE=aarch64-linux-gnu-
@@ -20,6 +20,12 @@ clean:
 
 help:
 	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERN_DIR) M=$(PWD) help
+
+host:
+	make  -C $(HOST_KERN_DIR) M=$(PWD) modules
+
+host_clean:
+	make -C $(HOST_KERN_DIR) M=$(PWD) clean
 
 copy_ko:
 	cp -r ../01_Character_Driver/ <qemu_shared>/host_shared
