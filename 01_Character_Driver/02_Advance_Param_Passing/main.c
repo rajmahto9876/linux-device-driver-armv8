@@ -1,216 +1,343 @@
-#include<linux/module.h>
-#include<linux/fs.h>
-#include<linux/cdev.h>
-#include<linux/device.h>
-#include<linux/kdev_t.h>
-#include<linux/uaccess.h>
+/*
+# Write a character driver that supports 2 independent devices
 
-#undef pr_fmt
-#define pr_fmt(fmt)             "%s : "fmt,__func__
+    /dev/mydev0
+    /dev/mydev1
 
-#define MAX_DEVICE_COUNT	7
-#define DVC_MEM_SIZE    	512
+# Each device should maintain its own:
+    struct my_device {
+    struct cdev cdev;
+    int value;
+    char name[20];
+};
+*/
 
-/* Pseudo Character Buffer */
-char dvc_buf[DVC_MEM_SIZE];
+#include <linux/module.h>
+#include <linux/cdev.h>
+#include <linux/errno.h>
+#include <linux/device.h>
+#include <linux/uaccess.h>
+#include <linux/fs.h>
 
-/*Device Number */
-dev_t dvc_num;
+#define NUMBER_OF_DVC       3
+#define DVC_BASE_MINOR      0
+#define DVC_MAX_COUNT       NUMBER_OF_DVC
 
-/*cdev struct */
-struct cdev char_cdev;
+/* pseudo device's memory */
+const char *drv_class_name   = "drv_class";
+const char *drv_dvc_name_prf = "drv_dvc";
+const char *drv_dvc_num_name = "drv_num";
 
-/* pointer to class */
-struct class *pchar_Class;
+#define MAX_DVC_1_BUFFER        256
+#define MAX_DVC_2_BUFFER        1024 
+char dvc_buff_dev1[MAX_DVC_1_BUFFER];
+char dvc_buff_dev2[MAX_DVC_2_BUFFER];
 
-/* pointer to device under the class */
-struct device *pDvc;
+
+/*Device private data structure */
+struct dev_pvt_data_t
+{
+    char *buffer;
+    unsigned size;
+    const char *idt_num;
+    struct cdev dvc_cdev;
+};
+
+/* Driver private data structure */
+struct drv_pvt_data_t
+{
+    int total_devices;
+    /* This holds the device number */
+    dev_t  dvc_number;
+    struct class *dvc_class;
+    struct device *dvc_device;
+    struct dev_pvt_data_t dev_data[NUMBER_OF_DVC];
+};
+
+struct drv_pvt_data_t drv_pvt_data = 
+{
+    .total_devices = NUMBER_OF_DVC,
+    .dvc_number = 0,
+    .dvc_class = NULL,
+    .dvc_device = NULL,
+    .dev_data[0] =
+    {
+        .buffer  = dvc_buff_dev1,
+        .size    = MAX_DVC_1_BUFFER,
+        .idt_num = "dvc_1",
+    },
+
+    .dev_data[1] =
+    {
+        .buffer  = dvc_buff_dev2,
+        .size    = MAX_DVC_2_BUFFER,
+        .idt_num = "dvc_2",
+    },
+};
 
 /* file-ops Callbacks */
-static loff_t char_lseek(struct file *pFops, loff_t offset, int whence)
+static loff_t dev_lseek(struct file *pFops, loff_t offset, int whence)
 {
-    loff_t temp;
-    pr_info("lseek_called \n");
-    pr_info("Current File Pos %lld \n", pFops->f_pos);
-    
+    #if 0
+    int ret = 0;
+    loff_t temp_pos = 0;
+    pr_info("Current File Pos [%lld]\n", pFops->f_pos);
     switch(whence)
     {
-    	case SEEK_SET:
-	{
-	    if((offset > DVC_MEM_SIZE) || (offset < 0))
-	    {
-                 return -EINVAL;
-	    }
-	    pFops->f_pos = offset;
-	}
-	break;
-	
-	case SEEK_CUR:
+        /* to set postion to Offset. */
+        case SEEK_SET:
         {
-	    temp = pFops->f_pos + offset;
-            if((temp > DVC_MEM_SIZE) || (temp < 0))
+            pr_info("In SEEK_SET \n");
+            if((offset > MAX_KERNEL_BUFFER) || (offset < 0))
             {
-                 return -EINVAL;
+                return -EINVAL;
             }
-            pFops->f_pos = temp;
+            pFops->f_pos = offset;
         }
         break;
 
-	case SEEK_END:
+        /* to set postion with reference to Current. */
+        case SEEK_CUR: 
         {
-	    temp = DVC_MEM_SIZE + offset;
-            if((temp > DVC_MEM_SIZE) || (temp < 0))
+            pr_info("In SEEK_CUR \n");
+            temp_pos = pFops->f_pos + offset;
+            if((temp_pos > MAX_KERNEL_BUFFER) || (temp_pos < 0))
             {
-                 return -EINVAL;
+                return -EINVAL;
             }
-            pFops->f_pos = temp;
+            pFops->f_pos = temp_pos;
         }
         break;
-	
-	default:
-		return -EINVAL;
+
+        /* to set postion with reference to End (-v2 value is passed in offset). */
+        case SEEK_END:
+        {
+            pr_info("In SEEK_END \n");
+            temp_pos = MAX_KERNEL_BUFFER + offset;
+            if((temp_pos > MAX_KERNEL_BUFFER) || (temp_pos < 0))
+            {
+                return -EINVAL;
+            }
+            pFops->f_pos = temp_pos;
+        }
+        break;
+
+        default:
+        {
+            pr_info("In Invalid Case \n");
+            return -EINVAL;
+        }
+        break;
     }
 
-    pr_info("Update File pos %lld \n", pFops->f_pos);
+    pr_info("Updated File Pos [%lld]\n", pFops->f_pos);
+    return pFops->f_pos;
+    #endif
     return 0;
 }
 
-static ssize_t char_read(struct file *pFops, char __user *buff, size_t count, loff_t *pFpos)
+static ssize_t dev_read(struct file *pFops, char __user *buff, 
+            size_t count, loff_t *pFpos)
 {
-    pr_info("char_read requested %zu bytes\n", count);
-    pr_info("current file pos = %lld \n", *pFpos);
+    #if 0
+    int ret = 0;
+    ssize_t read_bytes = 0;
+    pr_info("dev_read requested %zu bytes\n", count);
+    pr_info("Current File Pos = [%lld] \n", (*pFpos));
 
-    /* 1. Adjust the count should not be greater then MEM_SIZE*/
-    if((*pFpos + count)> DVC_MEM_SIZE)
+    /* count + current count > size*/
+    read_bytes = (*pFpos) + count;
+    if( read_bytes> MAX_KERNEL_BUFFER)
     {
-        count = DVC_MEM_SIZE - *pFpos;
+        read_bytes = MAX_KERNEL_BUFFER - (*pFpos);
     }
 
-    /* 2. Copy to user buffer */
-    if(copy_to_user(buff, &dvc_buf[*pFpos], count))
+    if(read_bytes < 0 || read_bytes == 0)
     {
-    	return -EFAULT;
+        pr_err("Negative read_bytes \n");
+        return -ENOMEM;
     }
-    
-    /* update the *pFpos */
-    *pFpos = *pFpos + count;
 
-    pr_info("no of bytes succesfully read %zu \n", count);
-    pr_info("Update file pos %lld \n", *pFpos);
-    return count;
+    ret = copy_to_user(buff, kernel_buffer + (*pFpos), read_bytes);
+    if(ret!= 0)
+    {
+        pr_err("Failed to Copy [%ld] bytes", ret);
+        read_bytes = read_bytes - ret;
+    }
+
+    *pFpos = *pFpos + read_bytes;
+    pr_info("No of Bytes written = [%ld]\n", read_bytes);
+    pr_info("Updated File Pos = [%lld]\n", (*pFpos));
+    return read_bytes;
+    #endif
+    return 0;
 }
 
-static ssize_t char_write(struct file *pFops, const  char __user *buff, size_t count, loff_t *pFpos)
+static ssize_t dev_write(struct file *pFops, const  char __user *buff, 
+            size_t count, loff_t *pFpos)
 {
-    pr_info("char_write requested %zu bytes\n", count);
-    pr_info("current file pos = %lld \n", *pFpos);
+    #if 0
+    int ret = 0;
+    ssize_t write_bytes = 0;
+    pr_info("dev_write requested %zu bytes\n", count);
+    pr_info("Current File Pos = [%lld] \n", (*pFpos));
 
-    /* 1. Adjust the count should not be greater then MEM_SIZE*/
-    if((*pFpos + count)> DVC_MEM_SIZE)
+    /* count + current count > size*/
+    write_bytes = (*pFpos) + count;
+    if( write_bytes> MAX_KERNEL_BUFFER)
     {
-        count = DVC_MEM_SIZE - *pFpos;
+        write_bytes = MAX_KERNEL_BUFFER - (*pFpos);
     }
 
-    if(!count)
+    if(write_bytes < 0 || write_bytes == 0)
     {
-	return -ENOMEM;
+        pr_err("Negative Write Bytes \n");
+        return -ENOMEM;
     }
 
-    /* 2. Copy from user buffer */
-    if(copy_from_user(&dvc_buf[*pFpos], buff, count))
+    ret = copy_from_user(kernel_buffer + (*pFpos), buff, write_bytes);
+    if(ret!= 0)
     {
-        return -EFAULT;
+        pr_err("Failed to Copy [%ld] bytes", ret);
+        write_bytes = write_bytes - ret;
     }
 
-    /* update the *pFpos */
-    *pFpos = *pFpos + count;
+    *pFpos = *pFpos + write_bytes;
+    pr_info("No of Bytes written = [%ld]\n", write_bytes);
+    pr_info("Updated File Pos = [%lld]\n", (*pFpos));
+    return write_bytes;
+    #endif
 
-    pr_info("no of bytes succesfully written %zu \n", count);
-    pr_info("Update file pos %lld \n", *pFpos);
-    return count;
+    return 0;
 }
 
-static int char_open(struct inode *pInode, struct file *pFops)
+static int dev_open(struct inode *pInode, struct file *pFops)
 {
-   pr_info("char_open called \n");
+   pr_info("dev_open called \n");
    return 0;
 }
 
-static int char_flush(struct file *pFops, fl_owner_t id)
+static int dev_flush(struct file *pFops, fl_owner_t id)
 {
-    pr_info("char_flush called \n");
+    pr_info("dev_flush called \n");
     return 0;
 }
 
-static int char_release(struct inode *pInode, struct file *pFops)
+static int dev_release(struct inode *pInode, struct file *pFops)
 {
-    pr_info("char_release called \n");
+    pr_info("dev_release called \n");
     return 0;
 }
 
-/*file-ops struct */
-struct file_operations char_fops = 
+const struct file_operations dvc_fops =
 {
-     .llseek  = char_lseek,
-     .read    = char_read,
-     .write   = char_write,
-     .open    = char_open,
-     .flush   = char_flush,
-     .release = char_release,
-     .owner   = THIS_MODULE
+    .llseek  = dev_lseek,
+    .read    = dev_read,
+    .write   = dev_write,
+    .open    = dev_open,
+    .flush   = dev_flush,
+    .release = dev_release,
+    .owner   = THIS_MODULE
 };
 
-
-static int __init char_driver_init(void)
+static int __init dev_driver_init(void) 
 {
-    pr_info("Driver Init Called \n");
+    int ret = 0;
+    int itr = 0;
+    /* 1. allocate Device Number */
+    ret = alloc_chrdev_region(&drv_pvt_data.dvc_number, DVC_BASE_MINOR, DVC_MAX_COUNT,
+            drv_dvc_num_name);
+    if(ret!= 0)
+    {
+        pr_err("Alloc Char dev Failed");
+        goto init_end;
+    }
 
-    /* 1. Dynamically allocate device number */
-    alloc_chrdev_region(&dvc_num, 0, MAX_DEVICE_COUNT, "chr_dev_sample");
+    pr_info("Dvc Num = [%d], Major = [%d], Minor = [%d] \n", drv_pvt_data.dvc_number, MAJOR(drv_pvt_data.dvc_number), MINOR(drv_pvt_data.dvc_number));
 
-    pr_info("<Major>:<Minor> = %d:%d \n", MAJOR(dvc_num), MINOR(dvc_num)); 
+    /* 2. Allocate Device Class */
+    drv_pvt_data.dvc_class = class_create(THIS_MODULE, drv_class_name);
+    if(IS_ERR(drv_pvt_data.dvc_class))
+    {
+        pr_err("Class Create Error \n");
+        ret = PTR_ERR(drv_pvt_data.dvc_class);
+        goto unregister_chrdev;
+    }
 
-    /* 2. Initilise cdev with file operations */
-    cdev_init(&char_cdev, &char_fops);
+    for(itr = 0; itr < DVC_MAX_COUNT; itr++)
+    {
+        /* 3. Allocate Cdev (fops) */
+        cdev_init(&drv_pvt_data.dev_data[itr].dvc_cdev, &dvc_fops);
+        drv_pvt_data.dev_data[itr].dvc_cdev.owner = THIS_MODULE;
 
-    /* 3. Register cdev with VFS */
-    char_cdev.owner = THIS_MODULE;
-    cdev_add(&char_cdev, dvc_num, MAX_DEVICE_COUNT);
+        ret = cdev_add(&drv_pvt_data.dev_data[itr].dvc_cdev, drv_pvt_data.dvc_number + itr, 1);
+        if(ret!= 0)
+        {
+            pr_err("cdev_add Error at itr [%d]\n", itr);
+            goto class_deinit;
+        }
 
-    /* 4. Class Create under /sys/class */
-    pchar_Class = class_create("char_class");
+        /* 4. Device Create */
+        drv_pvt_data.dvc_device = device_create(drv_pvt_data.dvc_class, NULL, drv_pvt_data.dvc_number + itr, 
+            NULL, drv_dvc_name_prf, "%d", itr + 1);
+
+        if(IS_ERR(drv_pvt_data.dvc_device))
+        {
+            pr_err("Device Create Error at itr [%d]\n", itr);
+            ret = PTR_ERR(drv_pvt_data.dvc_device);
+            goto cdev_deinit;
+        }
+    }
     
-    /* 5. Device Create under the Class */
-    pDvc = device_create(pchar_Class, NULL, dvc_num, NULL, "char_dvd");
 
-    pr_info("Driver Init OK\n");
+    pr_info("In Init character Driver\n");
     return 0;
+
+cdev_deinit:
+    for(;itr>=0; itr--)
+    {
+        device_destroy(drv_pvt_data.dvc_class, drv_pvt_data.dvc_number + itr);
+        cdev_del(&drv_pvt_data.dev_data[itr].dvc_cdev);
+    }
+
+class_deinit:
+    class_destroy(drv_pvt_data.dvc_class);
+
+unregister_chrdev:
+    unregister_chrdev_region(drv_pvt_data.dvc_number, DVC_MAX_COUNT);
+
+init_end:
+    return ret;
 }
 
-static void __exit char_driver_clean(void)
+static void __exit dev_driver_clean(void) 
 {
-    /* 1. Destroy Device */
-    device_destroy(pchar_Class, dvc_num);
+    int itr = 0;
+    for(itr = 0; itr<DVC_MAX_COUNT; itr++)
+    {
+        if(drv_pvt_data.dvc_device!= NULL)
+        {
+            device_destroy(drv_pvt_data.dvc_class, drv_pvt_data.dvc_number + itr);
+            cdev_del(&drv_pvt_data.dev_data[itr].dvc_cdev);
+        }
+    }
+
+    if(drv_pvt_data.dvc_class!= NULL)
+    {
+        class_destroy(drv_pvt_data.dvc_class);
+    }
+
+    if(drv_pvt_data.dvc_number!= 0)
+    {
+        unregister_chrdev_region(drv_pvt_data.dvc_number, DVC_MAX_COUNT);
+    }
     
-    /* 2. Class Destroy */
-    class_destroy(pchar_Class);
-
-    /* 3. Cdev Delete */
-    cdev_del(&char_cdev);
-
-    /* 4. Unallocate device Number */
-    unregister_chrdev_region(dvc_num, MAX_DEVICE_COUNT);
-
-    pr_info("Driver Clean Up Called \n");
+    pr_info("In Exit character Driver\n");
 }
 
-module_init(char_driver_init);
-module_exit(char_driver_clean);
+module_init(dev_driver_init);
+module_exit(dev_driver_clean);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Raj Kumar Mahto");
 MODULE_DESCRIPTION("A simple character driver module");
-
-
-
-

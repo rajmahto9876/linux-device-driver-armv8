@@ -24,8 +24,59 @@ const char *device_name = "dvc_device";
 /* file-ops Callbacks */
 static loff_t dev_lseek(struct file *pFops, loff_t offset, int whence)
 {
-    pr_info("lseek_called \n");
-    return 0;
+    int ret = 0;
+    loff_t temp_pos = 0;
+    pr_info("Current File Pos [%lld]\n", pFops->f_pos);
+    switch(whence)
+    {
+        /* to set postion to Offset. */
+        case SEEK_SET:
+        {
+            pr_info("In SEEK_SET \n");
+            if((offset > MAX_KERNEL_BUFFER) || (offset < 0))
+            {
+                return -EINVAL;
+            }
+            pFops->f_pos = offset;
+        }
+        break;
+
+        /* to set postion with reference to Current. */
+        case SEEK_CUR: 
+        {
+            pr_info("In SEEK_CUR \n");
+            temp_pos = pFops->f_pos + offset;
+            if((temp_pos > MAX_KERNEL_BUFFER) || (temp_pos < 0))
+            {
+                return -EINVAL;
+            }
+            pFops->f_pos = temp_pos;
+        }
+        break;
+
+        /* to set postion with reference to End (-v2 value is passed in offset). */
+        case SEEK_END:
+        {
+            pr_info("In SEEK_END \n");
+            temp_pos = MAX_KERNEL_BUFFER + offset;
+            if((temp_pos > MAX_KERNEL_BUFFER) || (temp_pos < 0))
+            {
+                return -EINVAL;
+            }
+            pFops->f_pos = temp_pos;
+        }
+        break;
+
+        default:
+        {
+            pr_info("In Invalid Case \n");
+            return -EINVAL;
+        }
+        break;
+    }
+
+    pr_info("Updated File Pos [%lld]\n", pFops->f_pos);
+    return pFops->f_pos;
 }
 
 static ssize_t dev_read(struct file *pFops, char __user *buff, 
@@ -212,7 +263,3 @@ module_exit(dev_driver_clean);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Raj Kumar Mahto");
 MODULE_DESCRIPTION("A simple character driver module");
-
-
-
-
